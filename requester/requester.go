@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"golang.org/x/net/http2"
-	"math"
 )
 
 // Max size of the buffer of result channel.
@@ -251,7 +250,7 @@ func (b *Work) sendReq(ctx context.Context, client *http.Client, throttle <-chan
 	var dnsStart, connStart, resStart, reqStart, delayStart time.Time
 	var dnsDuration, connDuration, reqDuration, delayDuration, resDuration time.Duration
 
-	flushCounter := make(chan int, math.MaxInt32)
+	flushCounter := make(chan int, 1000)
 
 	req, cancel := b.Req.makeRequest(ctx, throttle, flushCounter)
 
