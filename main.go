@@ -29,11 +29,11 @@ var (
 	// payload options
 	numAgents       = flag.Int("c", 1, "number of agents sending data concurrently")
 	qps             = flag.Float64("q", 0, "queries per second")
-	pause           = flag.Duration("p", 0*time.Millisecond, "Only used if `qps` is not set. Defines the pause between sending events over the same http request.")
-	numErrors       = flag.Int("e", 1, "number of errors")
-	numFrames       = flag.Int("f", 1, "number of stacktrace frames per span")
-	numSpans        = flag.Int("s", 2, "number of spans")
-	numTransactions = flag.Int("t", 1, "number of transactions")
+	pause           = flag.Duration("p", 100*time.Millisecond, "Only used if qps is not set. Defines the pause between sending events over the same http request.")
+	numErrors       = flag.Int("e", 10, "number of errors")
+	numTransactions = flag.Int("t", 10, "number of transactions")
+	numFrames       = flag.Int("f", 20, "number of stacktrace frames per span")
+	numSpans        = flag.Int("s", 20, "number of spans")
 
 	// http options
 	baseUrl            = flag.String("base-url", "http://localhost:8200", "")
