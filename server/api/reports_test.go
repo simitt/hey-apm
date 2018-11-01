@@ -28,7 +28,6 @@ var report = TestReport{
 	RevDate:          "Fri, 20 Apr 2018 10:00:00 +0200",
 	ApmFlags:         "-E apm-server.host=http://localhost:8200 -E output.elasticsearch.hosts=[http://localhost:9200]",
 	MaxRss:           mb1,
-	ReqSize:          1,
 	TestResult: TestResult{
 		Duration:          time.Second * 30,
 		Elapsed:           time.Second * 30,
@@ -39,12 +38,13 @@ var report = TestReport{
 		Agents:            1,
 		Throttle:          math.MaxInt16,
 		GzipReqSize:       1,
+		ReqSize:          1,
 		ElasticUrl:        "http://localhost:9200",
 		ApmUrl:            "http://localhost:8200",
 		ApmHost:           "localhost",
 		Branch:            "master",
 		TotalResponses:    1,
-		AcceptedResponses: 1,
+		// AcceptedResponses: 1,
 		ActualDocs:        1,
 	},
 }
@@ -159,7 +159,7 @@ func (b *builder) setId(s string) *builder {
 }
 
 func (b *builder) setDocsPerRequest() *builder {
-	b.DocsPerRequest = int(b.Errors + b.Transactions + (b.Transactions * b.Spans))
+	b.DocsPerRequest = int64(b.Errors + b.Transactions + (b.Transactions * b.Spans))
 	return b
 }
 
@@ -169,7 +169,7 @@ func (b *builder) addFlag(s string) *builder {
 }
 
 func (b *builder) get() TestReport {
-	r := NewReport(b.TestResult, b.User, b.Revision, b.RevDate, false, false, int64(b.ReqSize), b.MaxRss, b.Limit, b.apmFlags(), io.NewBufferWriter())
+	r := NewReport(b.TestResult, b.User, b.Revision, b.RevDate, false, false, b.MaxRss, b.Limit, b.apmFlags(), io.NewBufferWriter())
 	r.ReportId = b.ReportId
 	r.ReportDate = b.ReportDate
 	return r

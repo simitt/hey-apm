@@ -54,6 +54,7 @@ func LoadTest(w stdio.Writer, state State, waitForCancel func(), t target.Target
 		work.Stop()
 		elapsedTime := time.Now().Sub(start)
 		codes := work.StatusCodes()
+		fmt.Println("BLABABLAL " , work.Flushes())
 		_, totalResponses := output.SortedTotal(codes)
 		result = TestResult{
 			Elapsed:           elapsedTime,
@@ -62,17 +63,19 @@ func LoadTest(w stdio.Writer, state State, waitForCancel func(), t target.Target
 			Transactions:      t.Config.NumTransactions,
 			Spans:             t.Config.NumSpans,
 			Frames:            t.Config.NumFrames,
-			DocsPerRequest:    int(t.Config.NumErrors + t.Config.NumTransactions + (t.Config.NumTransactions * t.Config.NumSpans)),
+			DocsPerRequest:    int64(t.Config.NumErrors + t.Config.NumTransactions + (t.Config.NumTransactions * t.Config.NumSpans)) * work.Flushes(),
 			Agents:            t.Config.NumAgents,
 			Throttle:          int(t.Config.Throttle),
 			Stream:            t.Config.Stream,
-			GzipReqSize:       len(t.Body),
+			GzipReqSize:       int64(len(t.Body)) * work.Flushes(),
+			ReqSize: 		   uncompressed * work.Flushes(),
+			Flushes: 		work.Flushes(),
 			ReqTimeout:        time.Duration(t.Config.RequestTimeout),
 			ElasticUrl:        state.ElasticSearch().Url(),
 			ApmUrl:            state.ApmServer().Url(),
 			ApmHost:           apmHost(state.ApmServer().Url()),
 			Branch:            state.ApmServer().Branch(),
-			AcceptedResponses: codes[202],
+			// AcceptedResponses: codes[202],
 			TotalResponses:    totalResponses,
 			ActualDocs:        state.ElasticSearch().Count() - docsBefore,
 		}
