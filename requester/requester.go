@@ -28,7 +28,6 @@ import (
 	"os"
 	"sync"
 	"time"
-
 	"golang.org/x/net/http2"
 )
 
@@ -69,7 +68,7 @@ type StreamReq struct {
 	EPS float64
 }
 
-func (r *StreamReq) makeRequest(ctx context.Context, throttle <-chan time.Time, flushCounter chan int) (*http.Request, context.CancelFunc) {
+func (r *StreamReq) makeRequest(ctx context.Context, throttle <-chan time.Time, flushCounter *int) (*http.Request, context.CancelFunc) {
 	pReader, pWriter := io.Pipe()
 	req, err := http.NewRequest(r.Method, r.Url, pReader)
 	if err != nil {
@@ -102,7 +101,7 @@ func (r *StreamReq) makeRequest(ctx context.Context, throttle <-chan time.Time, 
 					fmt.Println("[debug] error writing to pipe")
 					return
 				}else{
-					flushCounter <- 1
+					*flushCounter += 1
 				}
 				if r.qps() > 0 {
 					<-throttle
@@ -111,7 +110,10 @@ func (r *StreamReq) makeRequest(ctx context.Context, throttle <-chan time.Time, 
 				}
 			}
 		}
+
+
 	}(pWriter)
+
 	return req, cancel
 }
 
@@ -137,11 +139,11 @@ type SimpleReq struct {
 	QPS float64
 }
 
-func (r *SimpleReq) makeRequest(ctx context.Context, throttle <-chan time.Time, flushCounter chan int) (*http.Request, context.CancelFunc) {
+func (r *SimpleReq) makeRequest(ctx context.Context, throttle <-chan time.Time, flushCounter *int) (*http.Request, context.CancelFunc) {
 	if r.QPS > 0 {
 		<-throttle
 	}
-	flushCounter <- 1
+	*flushCounter = 1
 	return cloneRequest(r.Request, r.RequestBody), func() {}
 }
 
@@ -158,7 +160,7 @@ func (r *SimpleReq) qps() float64 {
 }
 
 type Req interface {
-	makeRequest(context.Context, <-chan time.Time, chan int) (*http.Request, context.CancelFunc)
+	makeRequest(context.Context, <-chan time.Time, *int) (*http.Request, context.CancelFunc)
 	ctxRun() (context.Context, context.CancelFunc)
 	clientTimeout() time.Duration
 	qps() float64
@@ -249,9 +251,9 @@ func (b *Work) sendReq(ctx context.Context, client *http.Client, throttle <-chan
 	var dnsStart, connStart, resStart, reqStart, delayStart time.Time
 	var dnsDuration, connDuration, reqDuration, delayDuration, resDuration time.Duration
 
-	flushCounter := make(chan int, 1000)
+	flushCounter := 0
 
-	req, cancel := b.Req.makeRequest(ctx, throttle, flushCounter)
+	req, cancel := b.Req.makeRequest(ctx, throttle, &flushCounter)
 
 	trace := &httptrace.ClientTrace{
 		DNSStart: func(info httptrace.DNSStartInfo) {
@@ -287,11 +289,6 @@ func (b *Work) sendReq(ctx context.Context, client *http.Client, throttle <-chan
 		io.Copy(ioutil.Discard, resp.Body)
 		resp.Body.Close()
 	}
-	close(flushCounter)
-	var flushAcc int
-	for x := range flushCounter {
-		flushAcc += x
-	}
 	cancel()
 	t := time.Now()
 	resDuration = t.Sub(resStart)
@@ -306,9 +303,8 @@ func (b *Work) sendReq(ctx context.Context, client *http.Client, throttle <-chan
 		reqDuration:   reqDuration,
 		resDuration:   resDuration,
 		delayDuration: delayDuration,
-		flushPerReq: int64(flushAcc),
+		flushPerReq: int64(flushCounter),
 	}
-
 }
 
 func (b *Work) runWorker(parent context.Context, client *http.Client, n int) {
