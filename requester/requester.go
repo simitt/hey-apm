@@ -87,7 +87,7 @@ func (r *StreamReq) makeRequest(ctx context.Context, throttle <-chan time.Time, 
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, r.Timeout)
-	//req.WithContext(ctx)
+	req.WithContext(ctx)
 
 	go func(w io.WriteCloser) {
 		defer w.Close()
@@ -102,7 +102,6 @@ func (r *StreamReq) makeRequest(ctx context.Context, throttle <-chan time.Time, 
 					fmt.Println("[debug] error writing to pipe")
 					return
 				}else{
-					fmt.Println("+1")
 					flushCounter <- 1
 				}
 				if r.qps() > 0 {
@@ -289,12 +288,10 @@ func (b *Work) sendReq(ctx context.Context, client *http.Client, throttle <-chan
 		resp.Body.Close()
 	}
 	close(flushCounter)
-	fmt.Println("before reading chan ", len(flushCounter))
 	var flushAcc int
 	for x := range flushCounter {
 		flushAcc += x
 	}
-	fmt.Println("after reading chan ")
 	cancel()
 	t := time.Now()
 	resDuration = t.Sub(resStart)
