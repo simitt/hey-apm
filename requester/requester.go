@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"golang.org/x/net/http2"
+	"math"
 )
 
 // Max size of the buffer of result channel.
@@ -46,6 +47,7 @@ type result struct {
 	resDuration   time.Duration // response "read" duration
 	delayDuration time.Duration // delay between response and request
 	contentLength int64
+	flushPerReq   int64
 }
 
 type StreamReq struct {
@@ -68,7 +70,7 @@ type StreamReq struct {
 	EPS float64
 }
 
-func (r *StreamReq) makeRequest(ctx context.Context, throttle <-chan time.Time) (*http.Request, context.CancelFunc) {
+func (r *StreamReq) makeRequest(ctx context.Context, throttle <-chan time.Time, flushCounter chan int) (*http.Request, context.CancelFunc) {
 	pReader, pWriter := io.Pipe()
 	req, err := http.NewRequest(r.Method, r.Url, pReader)
 	if err != nil {
@@ -86,6 +88,7 @@ func (r *StreamReq) makeRequest(ctx context.Context, throttle <-chan time.Time) 
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, r.Timeout)
+	//req.WithContext(ctx)
 
 	go func(w io.WriteCloser) {
 		defer w.Close()
@@ -99,6 +102,9 @@ func (r *StreamReq) makeRequest(ctx context.Context, throttle <-chan time.Time) 
 				if _, err := pW.Write(r.RequestBody); err != nil {
 					fmt.Println("[debug] error writing to pipe")
 					return
+				}else{
+					fmt.Println("+1")
+					flushCounter <- 1
 				}
 				if r.qps() > 0 {
 					<-throttle
@@ -133,10 +139,11 @@ type SimpleReq struct {
 	QPS float64
 }
 
-func (r *SimpleReq) makeRequest(ctx context.Context, throttle <-chan time.Time) (*http.Request, context.CancelFunc) {
+func (r *SimpleReq) makeRequest(ctx context.Context, throttle <-chan time.Time, flushCounter chan int) (*http.Request, context.CancelFunc) {
 	if r.QPS > 0 {
 		<-throttle
 	}
+	flushCounter <- 1
 	return cloneRequest(r.Request, r.RequestBody), func() {}
 }
 
@@ -153,7 +160,7 @@ func (r *SimpleReq) qps() float64 {
 }
 
 type Req interface {
-	makeRequest(context.Context, <-chan time.Time) (*http.Request, context.CancelFunc)
+	makeRequest(context.Context, <-chan time.Time, chan int) (*http.Request, context.CancelFunc)
 	ctxRun() (context.Context, context.CancelFunc)
 	clientTimeout() time.Duration
 	qps() float64
@@ -244,7 +251,9 @@ func (b *Work) sendReq(ctx context.Context, client *http.Client, throttle <-chan
 	var dnsStart, connStart, resStart, reqStart, delayStart time.Time
 	var dnsDuration, connDuration, reqDuration, delayDuration, resDuration time.Duration
 
-	req, cancel := b.Req.makeRequest(ctx, throttle)
+	flushCounter := make(chan int, math.MaxInt32)
+
+	req, cancel := b.Req.makeRequest(ctx, throttle, flushCounter)
 
 	trace := &httptrace.ClientTrace{
 		DNSStart: func(info httptrace.DNSStartInfo) {
@@ -280,7 +289,13 @@ func (b *Work) sendReq(ctx context.Context, client *http.Client, throttle <-chan
 		io.Copy(ioutil.Discard, resp.Body)
 		resp.Body.Close()
 	}
-
+	close(flushCounter)
+	fmt.Println("before reading chan ", len(flushCounter))
+	var flushAcc int
+	for x := range flushCounter {
+		flushAcc += x
+	}
+	fmt.Println("after reading chan ")
 	cancel()
 	t := time.Now()
 	resDuration = t.Sub(resStart)
@@ -295,6 +310,7 @@ func (b *Work) sendReq(ctx context.Context, client *http.Client, throttle <-chan
 		reqDuration:   reqDuration,
 		resDuration:   resDuration,
 		delayDuration: delayDuration,
+		flushPerReq: int64(flushAcc),
 	}
 
 }
@@ -384,4 +400,8 @@ func (w *Work) ErrorDist() map[string]int {
 
 func (w *Work) StatusCodes() map[int]int {
 	return w.report.statusCodeDist
+}
+
+func (w *Work) Flushes() int64 {
+	return w.report.flushesTotal
 }
