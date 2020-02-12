@@ -148,7 +148,8 @@ func (w *worker) addTransactions(frequency time.Duration, limit, spanMin, spanMa
 			case <-t:
 			}
 
-			tx := w.Tracer.StartTransaction("generated", "gen")
+			name := fmt.Sprintf("generated_%v", rand.Intn(300000))
+			tx := w.Tracer.StartTransaction(name, "gen")
 			if i := rand.Intn(2); i > 0{
 				var wg sync.WaitGroup
 				errCount := rand.Intn(3)
