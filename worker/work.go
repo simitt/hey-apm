@@ -1,13 +1,12 @@
 package worker
 
 import (
-	"context"
 	"errors"
 	"fmt"
+	"go.elastic.co/apm"
 	"math/rand"
 	"os"
 	"os/signal"
-	"strconv"
 	"sync"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 
 	"github.com/elastic/hey-apm/agent"
 
-	"go.elastic.co/apm"
 	"go.elastic.co/apm/stacktrace"
 )
 
@@ -126,9 +124,19 @@ func (w *worker) addTransactions(frequency time.Duration, limit, spanMin, spanMa
 		return
 	}
 	t := throttle(time.NewTicker(frequency).C)
-	generateSpan := func(ctx context.Context) {
-		span, ctx := apm.StartSpan(ctx, "I'm a span", "gen.era.ted")
-		span.End()
+	//generateSpan := func(ctx context.Context) {
+	//	span, ctx := apm.StartSpan(ctx, "I'm a span", "gen.era.ted")
+	//	span.End()
+	//}
+	generateErr := func(tx *apm.Transaction) {
+		defer func() {
+			if r := recover(); r != nil {
+				e := apm.DefaultTracer.Recovered(r)
+				e.SetTransaction(tx)
+				e.Send()
+			}
+		}()
+		panic("This is a simulated hey-apm error")
 	}
 
 	generator := func(done <-chan struct{}) error {
@@ -141,18 +149,18 @@ func (w *worker) addTransactions(frequency time.Duration, limit, spanMin, spanMa
 			}
 
 			tx := w.Tracer.StartTransaction("generated", "gen")
-			ctx := apm.ContextWithTransaction(context.Background(), tx)
-			var wg sync.WaitGroup
-			spanCount := rand.Intn(spanMax-spanMin+1) + spanMin
-			for i := 0; i < spanCount; i++ {
-				wg.Add(1)
-				go func() {
-					generateSpan(ctx)
-					wg.Done()
-				}()
+			if i := rand.Intn(2); i > 0{
+				var wg sync.WaitGroup
+				errCount := rand.Intn(3)
+				for i := 0; i < errCount; i++ {
+					wg.Add(1)
+					go func() {
+						generateErr(tx)
+						wg.Done()
+					}()
+				}
+				wg.Wait()
 			}
-			wg.Wait()
-			tx.Context.SetTag("spans", strconv.Itoa(spanCount))
 			tx.End()
 			count++
 		}
