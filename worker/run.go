@@ -76,6 +76,8 @@ func Run(input models.Input, testName string) (models.Report, error) {
 			logger.Println("report indexed with document Id " + report.ReportId)
 		}
 	}
+	// temp code
+	es.DeleteAPMIndices(testNode)
 	return report, err
 }
 

@@ -24,6 +24,10 @@ func init() {
 
 func main() {
 
+	// temporal!!
+	quickRun()
+	os.Exit(0)
+
 	var err error
 
 	input := parseFlags()
@@ -136,4 +140,30 @@ func parseFlags() models.Input {
 	input.ErrorFrameMinLimit = *errorFrameMinLimit
 
 	return input
+}
+
+func quickRun() {
+	input := models.Input{
+		IsBenchmark:          false,
+		ApmServerUrl:         "http://localhost:8200",
+		SkipIndexReport:      false,
+		ElasticsearchUrl:     "http://localhost:9200",
+		ElasticsearchAuth:    "admin:changeme",
+		ApmElasticsearchUrl:  "http://localhost:9200",
+		ApmElasticsearchAuth: "admin:changeme",
+		ServiceName:          "quick-service",
+		RunTimeout:           time.Second * 20,
+		FlushTimeout:         time.Second,
+		Instances:            1,
+		DelayMillis:          0,
+		TransactionFrequency: time.Millisecond,
+		TransactionLimit:     math.MaxInt32,
+		SpanMaxLimit:         5,
+		SpanMinLimit:         1,
+		ErrorFrequency:       time.Millisecond * 10,
+		ErrorLimit:           math.MaxInt32,
+		ErrorFrameMaxLimit:   20,
+		ErrorFrameMinLimit:   1,
+	}
+	worker.Run(input, "")
 }

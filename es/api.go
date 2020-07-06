@@ -3,6 +3,9 @@ package es
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"time"
+
 	"github.com/elastic/go-elasticsearch/v7"
 	"github.com/elastic/go-elasticsearch/v7/esutil"
 	"github.com/elastic/hey-apm/models"
@@ -102,6 +105,12 @@ func Count(conn Connection, index string) uint64 {
 }
 
 func DeleteAPMIndices(conn Connection) error {
+	fmt.Println()
+	fmt.Println("**************************************")
+	fmt.Println()
+	fmt.Println("WILL COUNT DOCS BEFORE AND AFTER delete_by_query")
+	fmt.Println()
+
 	body := map[string]interface{}{
 		"query": map[string]interface{}{
 			"bool": map[string]interface{}{
@@ -117,12 +126,43 @@ func DeleteAPMIndices(conn Connection) error {
 			},
 		},
 	}
-	resp, err := conn.DeleteByQuery([]string{"apm*"}, esutil.NewJSONReader(body))
+
+	var search = func(s string) {
+		fmt.Print("Docs " + s + "... ")
+		resp, err := conn.Search(
+			conn.Search.WithIndex("apm*"),
+			conn.Search.WithTrackTotalHits(true),
+			conn.Search.WithBody(esutil.NewJSONReader(body)),
+		)
+		if err != nil {
+			panic(err)
+		}
+		defer resp.Body.Close()
+		if resp.IsError() {
+			panic("panic!")
+		}
+		var m map[string]interface{}
+		bytes, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			panic(err)
+		}
+		json.Unmarshal(bytes, &m)
+		fmt.Println(m["hits"].(map[string]interface{})["total"].(map[string]interface{})["value"])
+	}
+	search("before")
+	defer search("after")
+
+	resp, err := conn.DeleteByQuery(
+		[]string{"apm*"},
+		esutil.NewJSONReader(body),
+		conn.DeleteByQuery.WithTimeout(time.Second*10),
+	)
 	if err != nil {
-		return err
+		panic(err)
 	}
 	if resp.IsError() {
-		return errors.New(fmt.Sprintf("%s: %s", resp.Status(), resp.String()))
+		panic("panic!")
 	}
+	resp.Body.Close()
 	return nil
 }
