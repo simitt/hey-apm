@@ -13,6 +13,7 @@ import (
 	"go.elastic.co/apm"
 
 	"github.com/elastic/hey-apm/benchmark"
+	"github.com/elastic/hey-apm/es"
 	"github.com/elastic/hey-apm/models"
 	"github.com/elastic/hey-apm/worker"
 )
@@ -24,10 +25,6 @@ func init() {
 
 func main() {
 
-	// temporal!!
-	quickRun()
-	os.Exit(0)
-
 	var err error
 
 	input := parseFlags()
@@ -37,10 +34,19 @@ func main() {
 		}
 		return
 	}
-	runWorkers(input)
+	if err := runWorkers(input); err != nil {
+		os.Exit(1)
+	}
 }
 
-func runWorkers(input models.Input) {
+func runWorkers(input models.Input) error {
+	// clean out old docs
+	testNode, err := es.NewConnection(input.ApmElasticsearchUrl, input.ApmElasticsearchAuth)
+	if err != nil {
+		return err
+	}
+	es.DeleteAPMIndices(testNode)
+
 	var wg sync.WaitGroup
 	for i := 0; i < input.Instances; i++ {
 		idx := i
@@ -50,12 +56,14 @@ func runWorkers(input models.Input) {
 			randomDelay := time.Duration(rand.Intn(input.DelayMillis)) * time.Millisecond
 			fmt.Println(fmt.Sprintf("--- Starting instance (%v) in %v milliseconds", idx, randomDelay))
 			time.Sleep(randomDelay)
+
 			if _, err := worker.Run(input, ""); err != nil {
 				os.Exit(1)
 			}
 		}()
 	}
 	wg.Wait()
+	return nil
 }
 
 func parseFlags() models.Input {
@@ -140,30 +148,4 @@ func parseFlags() models.Input {
 	input.ErrorFrameMinLimit = *errorFrameMinLimit
 
 	return input
-}
-
-func quickRun() {
-	input := models.Input{
-		IsBenchmark:          false,
-		ApmServerUrl:         "http://localhost:8200",
-		SkipIndexReport:      false,
-		ElasticsearchUrl:     "http://localhost:9200",
-		ElasticsearchAuth:    "admin:changeme",
-		ApmElasticsearchUrl:  "http://localhost:9200",
-		ApmElasticsearchAuth: "admin:changeme",
-		ServiceName:          "quick-service",
-		RunTimeout:           time.Second * 20,
-		FlushTimeout:         time.Second,
-		Instances:            1,
-		DelayMillis:          0,
-		TransactionFrequency: time.Millisecond,
-		TransactionLimit:     math.MaxInt32,
-		SpanMaxLimit:         5,
-		SpanMinLimit:         1,
-		ErrorFrequency:       time.Millisecond * 10,
-		ErrorLimit:           math.MaxInt32,
-		ErrorFrameMaxLimit:   20,
-		ErrorFrameMinLimit:   1,
-	}
-	worker.Run(input, "")
 }

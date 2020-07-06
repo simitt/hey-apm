@@ -33,6 +33,11 @@ func Run(input models.Input) error {
 
 	warmUp(input)
 
+	fmt.Println("deleting APM indices...")
+	if err = es.DeleteAPMIndices(conn); err != nil {
+		return err
+	}
+
 	run := runner(conn, input.RegressionMargin, input.RegressionDays)
 	run("transactions only", models.Wrap{input}.
 		WithTransactions(math.MaxInt32, time.Millisecond*5).
@@ -56,18 +61,12 @@ func Run(input models.Input) error {
 	run("transactions only very high load", models.Wrap{input}.
 		WithTransactions(math.MaxInt32, time.Microsecond*100).
 		Input)
-	err = run("transactions, spans and errors high load", models.Wrap{input}.
+	return run("transactions, spans and errors high load", models.Wrap{input}.
 		WithTransactions(math.MaxInt32, time.Millisecond*5).
 		WithSpans(10).
 		WithErrors(math.MaxInt32, time.Millisecond).
 		WithFrames(50).
 		Input)
-
-	if err == nil {
-		fmt.Println("deleting APM indices...")
-		err = es.DeleteAPMIndices(conn)
-	}
-	return err
 }
 
 // Runner keeps track of errors during successive calls, returning the last one.
